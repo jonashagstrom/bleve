@@ -16,6 +16,7 @@ package search
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -32,6 +33,7 @@ var LowTerm = string([]byte{0x00})
 type SearchSort interface {
 	UpdateVisitor(field string, term []byte)
 	Value(a *DocumentMatch) string
+	ValueBytes(a *DocumentMatch) []byte
 	Descending() bool
 
 	RequiresDocID() bool
@@ -204,6 +206,23 @@ func (so SortOrder) Value(doc *DocumentMatch) {
 	}
 }
 
+func (so SortOrder) ValueBytes(doc *DocumentMatch) []byte {
+	var orderBytes []byte
+	var sortFieldsAdded bool
+	for _, soi := range so {
+		if soi.RequiresFields() == nil {
+			orderBytes = append(orderBytes, soi.ValueBytes(doc)...)
+			continue
+		}
+		if sortFieldsAdded {
+			continue
+		}
+		orderBytes = append(orderBytes, soi.ValueBytes(doc)...)
+		sortFieldsAdded = true
+	}
+	return orderBytes
+}
+
 func (so SortOrder) UpdateVisitor(field string, term []byte) {
 	for _, soi := range so {
 		soi.UpdateVisitor(field, term)
@@ -373,6 +392,10 @@ func (s *SortField) Value(i *DocumentMatch) string {
 	return iTerm
 }
 
+func (s *SortField) ValueBytes(i *DocumentMatch) []byte {
+	return []byte(s.Value(i))
+}
+
 // Descending determines the order of the sort
 func (s *SortField) Descending() bool {
 	return s.Desc
@@ -524,6 +547,10 @@ func (s *SortDocID) Value(i *DocumentMatch) string {
 	return i.ID
 }
 
+func (s *SortDocID) ValueBytes(i *DocumentMatch) []byte {
+	return []byte(i.ID)
+}
+
 // Descending determines the order of the sort
 func (s *SortDocID) Descending() bool {
 	return s.Desc
@@ -567,6 +594,12 @@ func (s *SortScore) UpdateVisitor(field string, term []byte) {
 // Value returns the sort value of the DocumentMatch
 func (s *SortScore) Value(i *DocumentMatch) string {
 	return "_score"
+}
+
+func (s *SortScore) ValueBytes(i *DocumentMatch) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, math.Float64bits(i.Score))
+	return buf
 }
 
 // Descending determines the order of the sort
@@ -669,6 +702,10 @@ func (s *SortGeoDistance) Value(i *DocumentMatch) string {
 	}
 	distInt64 := numeric.Float64ToInt64(dist)
 	return string(numeric.MustNewPrefixCodedInt64(distInt64, 0))
+}
+
+func (s *SortGeoDistance) ValueBytes(i *DocumentMatch) []byte {
+	return []byte(s.Value(i))
 }
 
 // Descending determines the order of the sort
