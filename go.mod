@@ -1,4 +1,4 @@
-module github.com/blevesearch/bleve
+module github.com/jonashagstrom/bleve
 
 go 1.13
 
